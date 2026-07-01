@@ -871,6 +871,35 @@
     window.addEventListener('pointerup', onUp);
   }
 
+  // דוגם צבע ממוצע מהפיקסלים שמסביב לאזור שנחתך, כדי למלא את החור בצורה טבעית
+  function sampleSurroundingColor(ctx, sx, sy, sw, sh, canvasW, canvasH){
+    const margin = 3;
+    const samples = [];
+    const pushSample = (x, y) => {
+      x = Math.round(clamp(x, 0, canvasW - 1));
+      y = Math.round(clamp(y, 0, canvasH - 1));
+      try{
+        const d = ctx.getImageData(x, y, 1, 1).data;
+        if(d[3] > 0) samples.push([d[0], d[1], d[2]]);
+      }catch(err){ /* אזור לא נגיש - מתעלמים */ }
+    };
+    const stepsX = Math.max(1, Math.floor(sw/12));
+    const stepsY = Math.max(1, Math.floor(sh/12));
+    for(let x = sx; x < sx+sw; x += stepsX){
+      pushSample(x, sy - margin);
+      pushSample(x, sy + sh + margin);
+    }
+    for(let y = sy; y < sy+sh; y += stepsY){
+      pushSample(sx - margin, y);
+      pushSample(sx + sw + margin, y);
+    }
+    if(samples.length === 0) return null;
+    let r=0, g=0, b=0;
+    samples.forEach(s=>{ r+=s[0]; g+=s[1]; b+=s[2]; });
+    const n = samples.length;
+    return `rgb(${Math.round(r/n)}, ${Math.round(g/n)}, ${Math.round(b/n)})`;
+  }
+
   function finalizeCrop(left, top, w, h, stageRect){
     const containerW = stageRect.width, containerH = stageRect.height;
     const scale = Math.max(containerW/bgNaturalW, containerH/bgNaturalH);
@@ -894,7 +923,16 @@
     pieceCanvas.getContext('2d').drawImage(bgCanvas, sx, sy, sw, sh, 0, 0, sw, sh);
     const pieceSrc = pieceCanvas.toDataURL('image/png');
 
-    // 2. האלמנט נחתך בלבד - הרקע נשאר שלם ולא נפגע
+    // 2. מילוי המקום המקורי ברקע בצבע אחיד שנדגם מהסביבה הקרובה,
+    //    כדי שהמקום לא יישאר ריק/שקוף אלא יתמזג עם הרקע
+    const bgCtx = bgCanvas.getContext('2d');
+    const fillColor = sampleSurroundingColor(bgCtx, sx, sy, sw, sh, bgNaturalW, bgNaturalH);
+    if(fillColor){
+      bgCtx.fillStyle = fillColor;
+      bgCtx.fillRect(sx, sy, sw, sh);
+      syncBgDisplay();
+    }
+
     // 3. יצירת אלמנט חדש בדיוק במיקום שנבחר על המסך
     const el = {
       id: uid(),
