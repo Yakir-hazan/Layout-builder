@@ -24,7 +24,8 @@
     background:var(--navy-950);
     color:var(--text-light);
     font-family:"Segoe UI","Rubik","Heebo",Arial,sans-serif;
-    height:100%;
+    height:auto;
+    overflow-x:hidden;
   }
   .app{
     position:relative;
@@ -1185,7 +1186,61 @@
     URL.revokeObjectURL(url);
   });
 
-  render();
+  // ===== persistence =====
+  const STORAGE_KEY = 'layout-builder-v1';
+
+  function saveState(){
+    try{
+      const data = {
+        elements: JSON.parse(JSON.stringify(elements)),
+        idCounter,
+        rtlExport,
+        bgDataUrl: bgCanvas ? bgCanvas.toDataURL('image/png') : null,
+        bgNaturalW, bgNaturalH
+      };
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    } catch(e){ console.warn('save failed', e); }
+  }
+
+  // patch render to auto-save after every change
+  const _render = render;
+  let _saveTimer = null;
+  render = function(){
+    _render();
+    clearTimeout(_saveTimer);
+    _saveTimer = setTimeout(saveState, 400);
+  };
+
+  function loadState(){
+    try{
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if(!raw){ render(); return; }
+      const data = JSON.parse(raw);
+      elements = data.elements || [];
+      idCounter = data.idCounter || 1;
+      rtlExport = data.rtlExport !== undefined ? data.rtlExport : true;
+      bgNaturalW = data.bgNaturalW || 0;
+      bgNaturalH = data.bgNaturalH || 0;
+      // sync RTL button label
+      document.getElementById('rtlToggle').textContent = 'כיוון ייצוא: ' + (rtlExport ? 'RTL ✓' : 'LTR');
+      if(data.bgDataUrl){
+        const img = new Image();
+        img.onload = ()=>{
+          bgCanvas = document.createElement('canvas');
+          bgCanvas.width = bgNaturalW;
+          bgCanvas.height = bgNaturalH;
+          bgCanvas.getContext('2d').drawImage(img, 0, 0);
+          syncBgDisplay();
+          render();
+        };
+        img.src = data.bgDataUrl;
+      } else {
+        render();
+      }
+    } catch(e){ console.warn('load failed', e); render(); }
+  }
+
+  loadState();
 })();
 </script>
 
