@@ -483,6 +483,7 @@
 
     <div class="btn-row">
       <button class="btn" id="rtlToggle">כיוון ייצוא: RTL ✓</button>
+      <button class="btn" id="undoBtn" title="בטל פעולה אחרונה" style="min-width:48px;">↩️</button>
     </div>
     <button class="btn gold" id="exportBtn" style="padding:12px;">⚡ ייצוא קוד</button>
   </div>
@@ -544,6 +545,48 @@
   let selectedId = null;
   let rtlExport = true;
 
+  // ===== Undo stack =====
+  const undoStack = [];
+  const MAX_UNDO = 30;
+
+  function saveUndo(){
+    undoStack.push({
+      elements: JSON.parse(JSON.stringify(elements)),
+      bgDataUrl: bgCanvas ? bgCanvas.toDataURL('image/png') : null,
+      bgNaturalW, bgNaturalH,
+      idCounter
+    });
+    if(undoStack.length > MAX_UNDO) undoStack.shift();
+  }
+
+  function undo(){
+    if(undoStack.length === 0){ toastMsg('אין פעולה לביטול'); return; }
+    const snap = undoStack.pop();
+    elements = snap.elements;
+    idCounter = snap.idCounter;
+    bgNaturalW = snap.bgNaturalW;
+    bgNaturalH = snap.bgNaturalH;
+    if(snap.bgDataUrl){
+      const img = new Image();
+      img.onload = ()=>{
+        bgCanvas = document.createElement('canvas');
+        bgCanvas.width = snap.bgNaturalW;
+        bgCanvas.height = snap.bgNaturalH;
+        bgCanvas.getContext('2d').drawImage(img, 0, 0);
+        syncBgDisplay();
+        render();
+      };
+      img.src = snap.bgDataUrl;
+    } else {
+      bgCanvas = null;
+      syncBgDisplay();
+      render();
+    }
+    selectedId = null;
+    toastMsg('↩️ הפעולה בוטלה');
+    if(!snap.bgDataUrl) render();
+  }
+
   // ===== background master canvas (source of truth for crop) =====
   let bgCanvas = null;
   let bgNaturalW = 0, bgNaturalH = 0;
@@ -596,6 +639,7 @@
       z: elements.length + 1,
       opacity: 100
     };
+    saveUndo();
     elements.push(el);
     selectedId = el.id;
     render();
@@ -681,6 +725,7 @@
       });
       item.querySelector('[data-del]').addEventListener('click', (ev)=>{
         ev.stopPropagation();
+        saveUndo();
         elements = elements.filter(x=>x.id !== e.id);
         if(selectedId === e.id) selectedId = null;
         render();
@@ -752,6 +797,7 @@
     el.opacity = Number(e.target.value); render();
   });
   document.getElementById('deleteEl').addEventListener('click', ()=>{
+    saveUndo();
     elements = elements.filter(x=>x.id !== selectedId);
     selectedId = null;
     render();
@@ -901,6 +947,7 @@
   }
 
   function finalizeCrop(left, top, w, h, stageRect){
+    saveUndo();
     const containerW = stageRect.width, containerH = stageRect.height;
     const scale = Math.max(containerW/bgNaturalW, containerH/bgNaturalH);
     const displayW = bgNaturalW*scale, displayH = bgNaturalH*scale;
@@ -958,6 +1005,15 @@
     toastMsg('הקטע נחתך! גרור אותו למקום הרצוי 🎯');
   }
 
+  // ===== Undo button + Ctrl+Z =====
+  document.getElementById('undoBtn').addEventListener('click', undo);
+  document.addEventListener('keydown', e=>{
+    if((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey){
+      e.preventDefault();
+      undo();
+    }
+  });
+
   // ===== RTL toggle =====
   const rtlBtn = document.getElementById('rtlToggle');
   rtlBtn.addEventListener('click', ()=>{
@@ -978,6 +1034,7 @@
       const startX = ev.clientX;
       const startY = ev.clientY;
       const startPct = { x: target.x, y: target.y, w: target.w, h: target.h };
+      saveUndo();
       freshDiv.setPointerCapture(ev.pointerId);
 
       function onMove(mv){
@@ -1134,3 +1191,4 @@
 
 </body>
 </html>
+
