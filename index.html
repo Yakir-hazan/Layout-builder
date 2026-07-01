@@ -894,10 +894,7 @@
     pieceCanvas.getContext('2d').drawImage(bgCanvas, sx, sy, sw, sh, 0, 0, sw, sh);
     const pieceSrc = pieceCanvas.toDataURL('image/png');
 
-    // 2. חיתוך "חור" ברקע במקום שממנו נלקח הקטע
-    bgCanvas.getContext('2d').clearRect(sx, sy, sw, sh);
-    syncBgDisplay();
-
+    // 2. האלמנט נחתך בלבד - הרקע נשאר שלם ולא נפגע
     // 3. יצירת אלמנט חדש בדיוק במיקום שנבחר על המסך
     const el = {
       id: uid(),
